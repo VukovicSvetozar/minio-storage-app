@@ -1,0 +1,17 @@
+# Maven target folder (gdje god da se nalazi u projektu)
+**/target/
+
+# IDE i tekstualni editori
+**/.vscode/
+**/.idea/
+**/.settings/
+**/.classpath
+**/.project
+*.iml
+
+# Logovi i privremeni fajlovi
+*.log
+
+# Operativni sistemi
+.DS_Store
+Thumbs.db
