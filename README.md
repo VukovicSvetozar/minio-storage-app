@@ -22,7 +22,9 @@ Backend sistem koji integriše Spring Boot sa MinIO objektnim skladištem i MySQ
 
 Sistem je organizovan kao troslojna arhitektura: **klijentski sloj** (Swagger UI za testiranje REST API-ja), **aplikacioni sloj** (Spring Boot – kontroleri, poslovna logika, pristup podacima) i **infrastrukturni sloj** (MySQL i MinIO, oba u Docker kontejnerima).
 
-![Arhitektura sistema](docs/architecture-diagram.png)
+<div align="center">
+  <img src="assets/1.png" width="450" alt="Arhitektura">
+</div>
 
 Ključna arhitektonska odluka je razdvajanje **metapodataka** (čuvaju se u MySQL bazi) od **binarnog sadržaja** (skladišti se na MinIO serveru). Aplikacioni sloj koordinira oba sistema i obezbjeđuje njihovu međusobnu konzistentnost kroz strog redoslijed operacija i mehanizme kompenzacije u slučaju parcijalnog neuspjeha.
 
@@ -173,6 +175,4 @@ Aplikacija je organizovana kroz 12 kontrolera, svaki zadužen za jasno razgrani�
 - Presigned URL-ovi sa ograničenim trajanjem (podrazumijevano 900s, maksimalno 7200s)
 - Sanitizacija naziva fajlova prilikom preuzimanja radi sprječavanja napada putem zaglavlja
 
-## Autor
-
-**Svetozar Vuković** — [GitHub](https://github.com/VukovicSvetozar)
+---
