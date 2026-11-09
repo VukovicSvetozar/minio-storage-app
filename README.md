@@ -6,95 +6,134 @@
 ![MySQL](https://img.shields.io/badge/MySQL-database-4479A1?logo=mysql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
-Backend sistem koji integriše Spring Boot sa MinIO objektnim skladištem i MySQL bazom podataka za metapodatke. Sistem funkcioniše kao posrednički sloj između klijenta i S3-kompatibilnog skladišta – apstrahuje direktnu komunikaciju sa skladištem i centralizuje poslovnu logiku, kontrolu pristupa i upravljanje metapodacima.
-
-## Sadržaj
-
-- [Arhitektura](#arhitektura)
-- [Tehnologije](#tehnologije)
-- [Struktura projekta](#struktura-projekta)
-- [Preduslovi](#preduslovi)
-- [Pokretanje aplikacije](#pokretanje-aplikacije)
-- [Pregled funkcionalnosti](#pregled-funkcionalnosti)
-- [Sigurnost](#sigurnost)
-
-## Arhitektura
-
-Sistem je organizovan kao troslojna arhitektura: **klijentski sloj** (Swagger UI za testiranje REST API-ja), **aplikacioni sloj** (Spring Boot – kontroleri, poslovna logika, pristup podacima) i **infrastrukturni sloj** (MySQL i MinIO, oba u Docker kontejnerima).
+A Spring Boot backend that sits between clients and an S3-compatible MinIO store: file contents live in MinIO, metadata lives in MySQL, and business logic, access control and metadata management are handled in the application.
 
 <div align="center">
-  <img src="assets/1.png" width="450" alt="Arhitektura">
+  <img src="assets/1.png" width="450" alt="Architecture">
 </div>
 
-Ključna arhitektonska odluka je razdvajanje **metapodataka** (čuvaju se u MySQL bazi) od **binarnog sadržaja** (skladišti se na MinIO serveru). Aplikacioni sloj koordinira oba sistema i obezbjeđuje njihovu međusobnu konzistentnost kroz strog redoslijed operacija i mehanizme kompenzacije u slučaju parcijalnog neuspjeha.
+## Key features
 
-Ostali dizajnerski principi na kojima se sistem zasniva:
+- **Authentication:** registration with email verification, JWT (access + refresh token) with refresh token rotation, password recovery
+- **File management:** streaming uploads and downloads, presigned URLs and proxy streaming, advanced search with pagination
+- **Versioning:** file version history and restoring older versions
+- **Sharing:** public links with temporary tokens, expiry dates and a visit counter
+- **Access control:** fine-grained, at the file, bucket and role level
+- **Bucket policies:** lifecycle rules and a retention policy built on Object Lock
+- **Statistics:** storage usage per user, bucket and category
+- **Administration:** account management, health checks, synchronization between the database and MinIO
+- **API documentation:** Swagger / OpenAPI
 
-- **Baza kao primarni izvor metapodataka** – čitanje, pretraga i filtriranje idu isključivo kroz bazu; MinIO se poziva samo kada je potreban binarni sadržaj ili status verzioniranja
-- **Granularna kontrola pristupa na nivou fajla** – aplikacioni sloj nadograđuje MinIO-ovu kontrolu na nivou bucketa detaljnijim politikama
-- **Stateless streaming pristup** – aplikacija ne čuva fajlove lokalno niti ih učitava u memoriju, već ih kontinuiranim tokom prenosi direktno na/sa MinIO servera
-- **Kompenzacioni mehanizmi** – budući da baza i MinIO ne dijele zajednički transakcioni kontekst, neuspjeh u jednom sistemu se automatski sanira u drugom (npr. rollback otpremljenog objekta ako upis u bazu ne uspije)
+## Contents
 
-## Tehnologije
+- [Architecture](#architecture)
+- [Technologies](#technologies)
+- [Functionality overview](#functionality-overview)
+- [Security](#security)
+- [Project structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Running the application](#running-the-application)
 
-| Kategorija | Tehnologija |
+## Architecture
+
+The system has three layers: a **client layer** (Swagger UI for testing the REST API), an **application layer** (Spring Boot: controllers, business logic, data access) and an **infrastructure layer** (MySQL and MinIO, both running in Docker containers).
+
+The central design decision is to keep **metadata** (in MySQL) separate from **binary content** (on the MinIO server). The application layer coordinates both systems and tries to keep them consistent through a strict order of operations and compensation logic for partial failures.
+
+Other design principles:
+
+- **The database as the primary source of metadata:** reads, search and filtering go through the database only. MinIO is called only when the binary content or the versioning status is needed.
+- **Fine-grained access control at file level:** the application layer extends MinIO's bucket-level control with more detailed policies.
+- **Streaming file transfer:** the application does not store files locally or load entire files into memory. It streams them directly to and from MinIO.
+- **Compensation:** the database and MinIO do not share a transaction context, so a failure in one system is compensated in the other (for example, an uploaded object is rolled back if the database write fails).
+
+## Technologies
+
+| Category | Technology |
 |---|---|
-| Jezik / Runtime | Java 17 |
+| Language / Runtime | Java 17 |
 | Framework | Spring Boot |
-| Autentifikacija | JWT (access + refresh token) |
-| Baza podataka | MySQL |
-| Objektno skladište | MinIO (S3-kompatibilno) |
-| Dokumentacija API-ja | Swagger / OpenAPI |
-| Build alat | Apache Maven |
-| Infrastruktura | Docker, Docker Compose |
+| Authentication | JWT (access + refresh token) |
+| Database | MySQL |
+| Object storage | MinIO (S3-compatible) |
+| API documentation | Swagger / OpenAPI |
+| Build tool | Apache Maven |
+| Infrastructure | Docker, Docker Compose |
 
-## Struktura projekta
+## Functionality overview
+
+The application is organized into 12 controllers, each responsible for a distinct part of the system:
+
+| Controller | Responsibility |
+|---|---|
+| **AuthController** | Registration with email verification, login (username or email), JWT with refresh token rotation, logout, password recovery, logging of critical events |
+| **UserController** | Account administration: role assignment, activation/deactivation, protection of the system account, guarantee of at least one active admin, soft delete |
+| **HealthController** | Liveness and readiness checks, database and MinIO status (UP/DEGRADED/DOWN), detailed metrics for administrators |
+| **BucketController** | Creating and deleting buckets, changing their visibility, checking name availability, role-based views, enabling versioning |
+| **FileCommandController** | Streaming uploads, deletion, metadata updates; atomic quota check and rollback on failure |
+| **FileDownloadController** | Downloading and previewing files: presigned URLs and proxy streaming, filename sanitization, Unicode support |
+| **FileQueryController** | Read-only access: file details, personal collection, public catalog, filtering, advanced search (POST) with pagination |
+| **FileStatisticsController** | Storage usage statistics per user, bucket and category; admin view of the largest storage consumers |
+| **ShareLinkController** | Public file sharing via temporary tokens without authentication, expiry dates, visit counter, deactivation/deletion |
+| **FileVersionController** | File version history, restoring an older version, deleting a version (admin only), visibility inherited from the parent file |
+| **BucketLifecycleController** | Lifecycle rules (automatic deletion/transition) and a retention policy based on Object Lock (GOVERNANCE/COMPLIANCE) |
+| **BucketAdminController** | Synchronization between the database and the MinIO server, audit of orphaned and phantom records, recalculation of bucket statistics |
+
+## Security
+
+- JWT authentication with two tokens (access + refresh) and refresh token rotation; reuse of an already used token revokes the active sessions
+- Verification keys and password reset tokens are stored in the database only as SHA-256 hashes
+- Fine-grained access control at the file, bucket and role level (owner / bucket owner / administrator / public)
+- Presigned URLs with a limited lifetime (900 s by default, 7200 s maximum)
+- Filename sanitization on download to prevent HTTP header manipulation
+
+## Project structure
 
 ```
 minio-storage-app/
-├── backend-app/          # Spring Boot aplikacija
+├── backend-app/          # Spring Boot application
 │   ├── src/
 │   └── pom.xml
 └── docker-compose.yml    # MinIO, MySQL, phpMyAdmin
 ```
 
-## Preduslovi
+## Prerequisites
 
-Za pokretanje aplikacije potrebno je imati instalirano:
+You need the following installed:
 
 - Java 17
 - Apache Maven
-- Docker i Docker Compose
+- Docker and Docker Compose
 
-## Pokretanje aplikacije
+## Running the application
 
-### 1. Pokretanje Docker servisa
+### 1. Start the Docker services
 
-Sve infrastrukturne komponente pokreću se jednom komandom iz root foldera projekta:
+All infrastructure components start with a single command from the project root:
 
 ```bash
 cd minio-storage-app
 docker compose up -d
 ```
 
-Nakon toga dostupni su sljedeći servisi:
+The following services are then available (default credentials for the local setup):
 
-| Servis | URL | Korisnik | Lozinka |
+| Service | URL | User | Password |
 |---|---|---|---|
-| MinIO Konzola | http://localhost:9001 | minioadmin | minioadmin123 |
+| MinIO Console | http://localhost:9001 | minioadmin | minioadmin123 |
 | MinIO API | http://localhost:9000 | minioadmin | minioadmin123 |
 | phpMyAdmin | http://localhost:8081 | root | root123 |
 | MySQL | localhost:3306 | root / appuser | root123 / appuser123 |
 
-Baza podataka koja se koristi: `minio_app`
+Database used: `minio_app`
 
-### 2. Inicijalizacija administratorskog korisnika
+### 2. Create the initial admin user
 
-Prije prvog pokretanja aplikacije potrebno je kreirati inicijalnog administratorskog korisnika direktno u bazi podataka:
+The initial admin user is created directly in the database, in the `users` table.
 
-1. Otvoriti phpMyAdmin na adresi [http://localhost:8081](http://localhost:8081) (korisnik `root`, lozinka `root123`)
-2. Odabrati bazu `minio_app`, zatim tabelu `users`
-3. Izvršiti sljedeći SQL upit:
+1. Open phpMyAdmin at [http://localhost:8081](http://localhost:8081) (user `root`, password `root123`)
+2. Select the `minio_app` database, then the `users` table
+3. Run the following SQL query:
 
 ```sql
 INSERT INTO users (
@@ -116,63 +155,34 @@ INSERT INTO users (
 );
 ```
 
-> Ovaj korak zaobilazi standardnu registraciju i email verifikaciju, te direktno kreira korisnika s administratorskom rolom.
-> **Korisničko ime:** `system` &nbsp;·&nbsp; **Lozinka:** `system123*`
+> This step bypasses the regular registration and email verification and creates a user with the admin role directly.
+> **Username:** `system` &nbsp;·&nbsp; **Password:** `system123*`
 
-### 3. Pokretanje Spring Boot aplikacije
+### 3. Start the Spring Boot application
 
-Iz foldera `backend-app`, pokrenuti aplikaciju sljedećom komandom:
+From the `backend-app` folder, run:
 
 ```bash
 cd backend-app
 mvn spring-boot:run
 ```
 
-Sve potrebne zavisnosti definisane su u `pom.xml` fajlu i biće automatski preuzete prilikom prvog pokretanja.
+All dependencies are defined in `pom.xml` and are downloaded automatically on the first run.
 
-### 4. Testiranje API-ja putem Swagger UI
+### 4. Test the API through Swagger UI
 
-Nakon što je aplikacija pokrenuta, kompletna API dokumentacija dostupna je na adresi:
+Once the application is running, the API documentation is available at:
 [http://localhost:8082/swagger-ui/index.html](http://localhost:8082/swagger-ui/index.html)
 
-**Autentifikacija:**
+**Authentication:**
 
-1. Pronaći endpoint `POST /auth/login`
-2. Unijeti kredencijale:
+1. Find the `POST /auth/login` endpoint
+2. Enter the credentials:
    ```json
    { "username": "system", "password": "system123*" }
    ```
-3. Iz odgovora kopirati dobijeni JWT token
-4. Kliknuti na dugme **Authorize** (u gornjem desnom uglu Swagger interfejsa)
-5. Unijeti token u formatu: `Bearer <token>`
+3. Copy the JWT access token from the response
+4. Click the **Authorize** button (top right of the Swagger interface)
+5. Enter the token in the format `Bearer <token>`
 
-Nakon toga svi zaštićeni endpointi su dostupni za testiranje.
-
-## Pregled funkcionalnosti
-
-Aplikacija je organizovana kroz 12 kontrolera, svaki zadužen za jasno razgraničen dio sistema:
-
-| Kontroler | Odgovornost |
-|---|---|
-| **AuthController** | Registracija sa email verifikacijom, prijava (korisničko ime ili email), JWT sa rotacijom refresh tokena, odjava, oporavak lozinke, logovanje kritičnih događaja |
-| **UserController** | Administracija naloga – dodjela uloga, aktivacija/deaktivacija, zaštita sistemskog naloga, garancija bar jednog aktivnog admina, soft-delete |
-| **HealthController** | Liveness i readiness provjere, status baze i MinIO servisa (UP/DEGRADED/DOWN), detaljne metrike za administratore |
-| **BucketController** | Kreiranje, brisanje i promjena vidljivosti bucketa, provjera dostupnosti naziva, uvid prilagođen ulozi korisnika, uključivanje verzioniranja |
-| **FileCommandController** | Otpremanje fajlova streaming pristupom, brisanje, ažuriranje metapodataka; atomična provjera kvote i rollback pri neuspjehu |
-| **FileDownloadController** | Preuzimanje i pregled fajlova – presigned URL-ovi i proxy streaming, sanitizacija naziva, podrška za Unicode |
-| **FileQueryController** | Read-only pregled – detalji fajla, lična kolekcija, javni katalog, filtriranje, napredna pretraga (POST) sa paginacijom |
-| **FileStatisticsController** | Statistika iskorištenosti prostora po korisniku, bucketu i kategoriji; admin uvid u najveće potrošače |
-| **ShareLinkController** | Javno dijeljenje fajlova putem privremenih tokena bez autentifikacije, rokovi važenja, brojač posjeta, deaktivacija/brisanje |
-| **FileVersionController** | Istorija verzija fajla, vraćanje starije verzije, brisanje verzije (isključivo admin), nasljeđivanje vidljivosti od roditeljskog fajla |
-| **BucketLifecycleController** | Lifecycle pravila (automatsko brisanje/premještanje) i retention politika zasnovana na Object Lock-u (GOVERNANCE/COMPLIANCE) |
-| **BucketAdminController** | Sinhronizacija baze i MinIO servera, revizija siročića i fantomskih zapisa, rekalkulacija statistike bucketa |
-
-## Sigurnost
-
-- JWT autentifikacija sa dvostrukim tokenom (access + refresh) i rotacijom refresh tokena; ponovna upotreba iskorišćenog tokena opoziva aktivne sesije
-- Verifikacioni ključevi i tokeni za reset lozinke čuvaju se u bazi isključivo u obliku SHA-256 heša
-- Granularna kontrola pristupa na nivou fajla, bucketa i uloge (vlasnik / vlasnik bucketa / administrator / javno)
-- Presigned URL-ovi sa ograničenim trajanjem (podrazumijevano 900s, maksimalno 7200s)
-- Sanitizacija naziva fajlova prilikom preuzimanja radi sprječavanja napada putem zaglavlja
-
----
+After that, all protected endpoints can be tested.
