@@ -1,5 +1,7 @@
 # MinIO Storage App
 
+[English](README.md) | **Srpski**
+
 ![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-backend-brightgreen?logo=springboot&logoColor=white)
 ![MinIO](https://img.shields.io/badge/MinIO-object%20storage-C72E49?logo=minio&logoColor=white)
